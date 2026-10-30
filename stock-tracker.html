@@ -141,6 +141,12 @@
   .card.dirty { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
   .card-top { display: flex; align-items: flex-start; gap: 12px; }
   .item-name { font-size: 17px; font-weight: 600; line-height: 1.3; }
+  .item-icon { display: inline-grid; place-items: center; border-radius: 14px; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(74,52,38,.06); }
+  .item-icon svg { display: block; transition: transform .2s ease; }
+  .card:hover .item-icon svg, tr:hover .item-icon svg { transform: rotate(-6deg) scale(1.06); }
+  .card-top { align-items: center; }
+  .item-cell { display: flex; align-items: center; gap: 12px; }
+  .item-cell .item-icon { border-radius: 10px; }
   .item-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .badge {
     margin-left: auto; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 6px;
@@ -393,6 +399,107 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
 const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
 const isLow = (qty, reorder) => qty <= reorder;
 const shortfall = (qty, reorder) => Math.max(0, reorder - qty);
+
+/* ---------- Cute item icons ---------- */
+// Each icon is a small 48×48 drawing with a little face. Items are matched by name,
+// so new items get a sensible icon automatically (a smiling box if nothing matches).
+const INK = '#4A3426';
+const S = `stroke="${INK}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"`;
+function face(x, y) {
+  return `<circle cx="${x - 4}" cy="${y}" r="1.6" fill="${INK}"/><circle cx="${x + 4}" cy="${y}" r="1.6" fill="${INK}"/>
+    <path d="M${x - 2.4} ${y + 2.8} q2.4 2.2 4.8 0" fill="none" ${S}/>
+    <ellipse cx="${x - 7}" cy="${y + 3}" rx="1.9" ry="1.2" fill="#F59C93" opacity=".85"/>
+    <ellipse cx="${x + 7}" cy="${y + 3}" rx="1.9" ry="1.2" fill="#F59C93" opacity=".85"/>`;
+}
+const ICON_DRAW = {
+  carton: (body, band) => `
+    <rect x="20.5" y="5.5" width="7" height="5" rx="1.2" fill="${band}" ${S}/>
+    <path d="M14 18 L18 10 H30 L34 18 V40 a2 2 0 0 1-2 2 H16 a2 2 0 0 1-2-2Z" fill="${body}" ${S}/>
+    <path d="M14 18 H34" fill="none" ${S}/>
+    <path d="M14.9 34 H33.1 V40 a1.2 1.2 0 0 1-1.2 1.2 H16.1 a1.2 1.2 0 0 1-1.2-1.2Z" fill="${band}"/>
+    ${face(24, 25)}`,
+  coffeeBag: (body, top) => `
+    <path d="M13 15 H35 L36.5 40 a2 2 0 0 1-2 2 H13.5 a2 2 0 0 1-2-2Z" fill="${body}" ${S}/>
+    <rect x="11.5" y="9" width="25" height="7" rx="2.5" fill="${top}" ${S}/>
+    <g transform="rotate(-30 30.5 36.5)">
+      <ellipse cx="30.5" cy="36.5" rx="3" ry="2" fill="${top}" ${S}/>
+      <path d="M28.6 36.5 q1.9-.9 3.8 0" fill="none" stroke="${body}" stroke-width="1.1" stroke-linecap="round"/>
+    </g>
+    ${face(23, 25)}`,
+  cup: (sleeve, tall) => {
+    const t = tall ? 11 : 15;
+    return `
+    <path d="M14.5 ${t + 3} H33.5 L30.5 42 H17.5Z" fill="#FFFFFF" ${S}/>
+    <path d="M15.8 29 H32.2 L31.3 36 H16.7Z" fill="${sleeve}" ${S}/>
+    <rect x="12" y="${t}" width="24" height="5" rx="2.5" fill="#EFE5DA" ${S}/>
+    ${face(24, t + 9)}`;
+  },
+  lid: () => `
+    <path d="M13 31 Q13 16 24 16 Q35 16 35 31Z" fill="#F4ECE3" ${S}/>
+    <rect x="9" y="30" width="30" height="6" rx="3" fill="#E7DACB" ${S}/>
+    <rect x="21" y="12.5" width="6" height="4" rx="1.5" fill="#E7DACB" ${S}/>
+    ${face(24, 24)}`,
+  napkins: () => `
+    <rect x="9" y="29" width="30" height="11" rx="3" fill="#DCE6F3" ${S}/>
+    <rect x="11" y="23" width="26" height="10" rx="3" fill="#EAF0F8" ${S}/>
+    <rect x="12.5" y="10" width="23" height="17" rx="3" fill="#FFFFFF" ${S}/>
+    <path d="M12.5 13 L35.5 25" fill="none" stroke="#DCE6F3" stroke-width="1.4"/>
+    ${face(24, 17)}`,
+  tin: (body, lid) => `
+    <rect x="13" y="14" width="22" height="27" rx="3" fill="${body}" ${S}/>
+    <rect x="13.9" y="29" width="20.2" height="6" fill="#FFFFFF" opacity=".55"/>
+    <ellipse cx="24" cy="14" rx="11" ry="3.6" fill="${lid}" ${S}/>
+    ${face(24, 22)}`,
+  bottle: (body) => `
+    <rect x="22" y="4.5" width="4" height="6" rx="1" fill="#EFE5DA" ${S}/>
+    <path d="M26 6.5 H32 V9" fill="none" ${S}/>
+    <rect x="20" y="10.5" width="8" height="5" rx="1.5" fill="#EFE5DA" ${S}/>
+    <rect x="14" y="15.5" width="20" height="27" rx="6" fill="${body}" ${S}/>
+    <rect x="16.5" y="31" width="15" height="7.5" rx="2" fill="#FFFFFF" opacity=".7"/>
+    ${face(24, 23.5)}`,
+  takeaway: () => `
+    <path d="M18.5 17 V13 a5.5 5.5 0 0 1 11 0 V17" fill="none" ${S}/>
+    <rect x="11" y="16" width="26" height="26" rx="2.5" fill="#E2BE94" ${S}/>
+    <rect x="11.9" y="16.9" width="24.2" height="4.5" fill="#D2A876"/>
+    ${face(24, 29)}`,
+  croissant: () => `
+    <path d="M5 31 Q6 14 24 12 Q42 14 43 31 Q37 35 33 30.5 Q30 37 24 37 Q18 37 15 30.5 Q11 35 5 31Z" fill="#F4BB63" ${S}/>
+    <path d="M15 30.5 Q15.5 20 21 14 M33 30.5 Q32.5 20 27 14" fill="none" stroke="#D9952F" stroke-width="1.4" stroke-linecap="round"/>
+    ${face(24, 25)}`,
+  box: () => `
+    <path d="M10 18 L24 11 L38 18 V34 L24 41 L10 34Z" fill="#F2D6B3" ${S}/>
+    <path d="M10 18 L24 25 L38 18 M24 25 V41" fill="none" ${S}/>
+    ${face(17, 27)}`,
+};
+// [match, icon, tile background]
+const ICON_RULES = [
+  [/oat/,                    () => ICON_DRAW.carton('#F5E6C8', '#D7B47A'), '#FBF3E4'],
+  [/milk|cream/,             () => ICON_DRAW.carton('#FFFFFF', '#8CB8EA'), '#EAF2FC'],
+  [/decaf/,                  () => ICON_DRAW.coffeeBag('#B5D8BB', '#7BAE86'), '#EAF5EC'],
+  [/coffee|bean|espresso/,   () => ICON_DRAW.coffeeBag('#D9A57E', '#A9714B'), '#F7ECE3'],
+  [/lid/,                    () => ICON_DRAW.lid(), '#F4F0EB'],
+  [/16 ?oz|large cup/,       () => ICON_DRAW.cup('#F5C95E', true), '#FDF5DF'],
+  [/cup/,                    () => ICON_DRAW.cup('#EFA77E', false), '#FCEEE6'],
+  [/napkin|tissue/,          () => ICON_DRAW.napkins(), '#EEF3FA'],
+  [/matcha|green tea/,       () => ICON_DRAW.tin('#B7D99A', '#7FAF5C'), '#EEF6E6'],
+  [/choc|cocoa/,             () => ICON_DRAW.tin('#CF9670', '#8E5A3B'), '#F6ECE4'],
+  [/vanilla/,                () => ICON_DRAW.bottle('#F8EBC0'), '#FDF8E8'],
+  [/caramel|syrup|sauce/,    () => ICON_DRAW.bottle('#EDB06A'), '#FCF0E1'],
+  [/bag/,                    () => ICON_DRAW.takeaway(), '#F7EEE3'],
+  [/croissant|pastry|bake/,  () => ICON_DRAW.croissant(), '#FDF2DD'],
+];
+const iconCache = {};
+function itemIcon(name, size = 48) {
+  const key = name + size;
+  if (!iconCache[key]) {
+    const n = name.toLowerCase();
+    const rule = ICON_RULES.find(([re]) => re.test(n));
+    const [draw, bg] = rule ? [rule[1], rule[2]] : [ICON_DRAW.box, '#F7EEE3'];
+    iconCache[key] = `<span class="item-icon" style="background:${bg};width:${size}px;height:${size}px" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="${Math.round(size * .82)}" height="${Math.round(size * .82)}">${draw()}</svg></span>`;
+  }
+  return iconCache[key];
+}
 
 /* ---------- Toast & sync status ---------- */
 let toastTimer;
@@ -803,6 +910,7 @@ function cardHtml(r) {
   return `
   <article class="card ${low ? 'is-low' : ''} ${dirty ? 'dirty' : ''}" data-id="${r.id}">
     <div class="card-top">
+      ${itemIcon(r.item_name, 52)}
       <div>
         <div class="item-name">${esc(r.item_name)}</div>
         <div class="item-meta">${esc(r.sku)} · per ${esc(r.unit)}</div>
@@ -948,7 +1056,7 @@ function renderOrders() {
   const legend = state.outlets.map((o, i) => `<span><i class="o${i % 3}"></i>${esc(o)}</span>`).join('');
   const body = lines.map(l => `
     <tr>
-      <td><div>${esc(l.name)}</div><div class="sub">${esc(l.sku)} · ${esc(l.category)}</div></td>
+      <td><div class="item-cell">${itemIcon(l.name, 38)}<div><div>${esc(l.name)}</div><div class="sub">${esc(l.sku)} · ${esc(l.category)}</div></div></div></td>
       ${state.outlets.map(o => `<td class="num">${l.per[o] > 0 ? l.per[o] : '<span class="dash">—</span>'}</td>`).join('')}
       <td class="num total">${l.total}</td>
       <td class="sub">${esc(l.unit)}${l.total === 1 ? '' : 's'}</td>
