@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café Stock Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --bg: #F5F6F8;
+    --card: #FFFFFF;
+    --line: #E4E7EC;
+    --line-strong: #D0D5DD;
+    --text: #1D2433;
+    --muted: #667085;
+    --soft: #F2F4F7;
+    --accent: #E8702A;
+    --accent-ink: #B4531A;
+    --accent-soft: #FDF0E7;
+    --ok: #3F7D5A;
+    --ok-soft: #EAF3EE;
+    --danger: #B42318;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151B; --card: #1A1E26; --line: #2A303B; --line-strong: #3A4150;
+      --text: #E8EAEE; --muted: #98A2B3; --soft: #222833;
+      --accent: #F08A4B; --accent-ink: #F6A877; --accent-soft: #3A2618;
+      --ok: #7CC29A; --ok-soft: #1C2B23; --danger: #F97066;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+
+  /* Top bar */
+  .topbar { background: var(--card); border-bottom: 1px solid var(--line); }
+  .topbar .wrap { display: flex; align-items: center; gap: 16px; height: 68px; padding-bottom: 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 19px; letter-spacing: -.01em; }
+  .brand-dot { width: 12px; height: 12px; border-radius: 4px; background: var(--accent); }
+  .spacer { flex: 1; }
+  .sync { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .sync .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .sync.busy .pip { background: var(--accent); }
+  .sync.err .pip { background: var(--danger); }
+
+  /* Buttons */
+  .btn {
+    border: 1px solid var(--line-strong); background: var(--card); border-radius: 10px;
+    padding: 9px 16px; font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { background: var(--soft); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+  .btn-ghost { border-color: transparent; background: transparent; color: var(--muted); }
+  .btn-ghost:hover { background: var(--soft); color: var(--text); }
+
+  /* Header */
+  .head { padding: 32px 0 20px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .head h1 { font-size: 30px; line-height: 1.2; margin: 0; letter-spacing: -.02em; }
+  .head p { margin: 4px 0 0; color: var(--muted); font-size: 16px; }
+
+  /* KPI tiles */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); }
+  .kpi-label { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .kpi-value { font-size: 32px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi-value.accent { color: var(--accent); }
+  .kpi-sub { font-size: 14px; color: var(--muted); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; box-shadow: inset 0 -1px 0 var(--line); margin-bottom: 20px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    background: none; border: none; padding: 12px 16px; font-size: 17px; font-weight: 600;
+    color: var(--muted); cursor: pointer; box-shadow: inset 0 -2px 0 transparent;
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+  .count {
+    font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 99px;
+    background: var(--soft); color: var(--muted);
+  }
+  .count.low { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* Filters */
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 24px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--card); border-radius: 99px;
+    padding: 7px 14px; font-size: 15px; font-weight: 500; cursor: pointer; color: var(--muted);
+  }
+  .chip:hover { color: var(--text); border-color: var(--line-strong); }
+  .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--card); }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); cursor: pointer; margin-left: auto; }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  /* Item cards */
+  .cat-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 12px; }
+  .cat-title:first-child { margin-top: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 16px;
+  }
+  .card.is-low { border-left: 4px solid var(--accent); padding-left: 17px; }
+  .card.dirty { border-color: var(--accent); }
+  .card-top { display: flex; align-items: flex-start; gap: 12px; }
+  .item-name { font-size: 19px; font-weight: 600; line-height: 1.3; }
+  .item-meta { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    margin-left: auto; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 99px;
+    background: var(--ok-soft); color: var(--ok); text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
+  }
+  .badge.low { background: var(--accent-soft); color: var(--accent-ink); }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-label { font-size: 14px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+  .stepper { display: flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+  .stepper button {
+    width: 44px; border: none; background: var(--soft); font-size: 22px; font-weight: 500; cursor: pointer; line-height: 1;
+  }
+  .stepper button:hover { background: var(--line); }
+  .stepper button:disabled { opacity: .4; cursor: default; }
+  .stepper input {
+    width: 100%; min-width: 0; text-align: center; border: none; background: var(--card);
+    font-size: 24px; font-weight: 700; padding: 6px 0; font-variant-numeric: tabular-nums;
+  }
+  .stepper input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .stepper input { -moz-appearance: textfield; }
+  .card-foot { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+  .note { font-size: 15px; color: var(--muted); }
+  .note strong { color: var(--accent-ink); }
+  .card-foot .btn { margin-left: auto; }
+  .card-foot .btn + .btn { margin-left: 0; }
+
+  /* Order list */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-head h2 { margin: 0; font-size: 21px; letter-spacing: -.01em; }
+  .panel-head p { margin: 2px 0 0; font-size: 15px; color: var(--muted); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  th { text-align: left; font-size: 14px; font-weight: 600; color: var(--muted); padding: 12px 24px; background: var(--soft); white-space: nowrap; }
+  td { padding: 14px 24px; border-top: 1px solid var(--line); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.total { font-weight: 700; font-size: 20px; color: var(--accent-ink); }
+  td .sub { font-size: 14px; color: var(--muted); }
+  .dash { color: var(--line-strong); }
+  .empty { padding: 48px 24px; text-align: center; color: var(--muted); }
+  .empty strong { display: block; color: var(--text); font-size: 19px; margin-bottom: 4px; }
+  .order-text { margin: 0; padding: 20px 24px; border-top: 1px solid var(--line); background: var(--soft); font: 15px/1.6 ui-monospace, "SF Mono", Consolas, monospace; white-space: pre-wrap; color: var(--text); }
+  .order-text-label { padding: 16px 24px 0; font-size: 14px; color: var(--muted); font-weight: 500; border-top: 1px solid var(--line); background: var(--soft); }
+  .order-text-label + .order-text { border-top: none; padding-top: 8px; }
+
+
+  /* Toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0;
+    background: var(--text); color: var(--card); padding: 12px 20px; border-radius: 10px; font-size: 15px; font-weight: 500;
+    transition: all .2s ease; pointer-events: none; z-index: 10; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { background: var(--danger); color: #fff; }
+
+  .loading { padding: 80px 0; text-align: center; color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  @media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 16px 48px; }
+    .topbar .wrap { height: 60px; }
+    .sync span { display: none; }
+    .head h1 { font-size: 25px; }
+    .kpi { padding: 14px 16px; }
+    .kpi-value { font-size: 26px; }
+    .grid { grid-template-columns: 1fr; }
+    .toggle { margin-left: 0; }
+    th, td { padding-left: 14px; padding-right: 14px; }
+    .panel-head { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="brand-dot"></span>Stockroom</div>
+    <div class="spacer"></div>
+    <div class="sync" id="sync" hidden><span class="pip"></span><span id="syncText">Synced</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="loading" id="loading">Loading…</div>
+
+  <!-- App -->
+  <section id="app" hidden>
+    <div class="head">
+      <div>
+        <h1>Stock overview</h1>
+        <p id="countedAt"></p>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn" id="refresh">Refresh</button>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <div id="view"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const SUPABASE_URL = 'https://mktqkopvppmwjgfnjlqn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_YJkt9WKGpn3vZu3VWvELKA_05R3WJ2N';
+// No sign-in: the stock table is readable and editable with the publishable key
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+
+const ORDER_TAB = '__order';
+const CATEGORY_ORDER = ['Coffee', 'Dairy', 'Powders & syrups', 'Bakery', 'Packaging', 'Other'];
+
+const state = {
+  rows: [],          // latest count per outlet + sku
+  outlets: [],
+  tab: null,
+  category: 'All',
+  lowOnly: false,
+  drafts: {},        // id -> { qty, reorder }
+  saving: {},        // id -> true
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+const isLow = (qty, reorder) => qty <= reorder;
+const shortfall = (qty, reorder) => Math.max(0, reorder - qty);
+
+/* ---------- Toast & sync status ---------- */
+let toastTimer;
+function toast(msg, isErr = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', isErr);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), isErr ? 5000 : 2400);
+}
+function setSync(mode, text) {
+  const s = $('sync');
+  s.hidden = false;
+  s.className = 'sync' + (mode ? ' ' + mode : '');
+  $('syncText').textContent = text;
+}
+
+/* ---------- Data ---------- */
+async function loadData() {
+  setSync('busy', 'Loading…');
+  const { data, error } = await db
+    .from('stock_counts')
+    .select('id, outlet, sku, item_name, unit, category, qty_on_hand, reorder_level, counted_at')
+    .order('counted_at', { ascending: false });
+
+  if (error) {
+    $('loading').textContent = 'Could not load stock: ' + error.message;
+    setSync('err', 'Error');
+    return;
+  }
+
+  // Keep only the latest count per outlet + SKU
+  const latest = new Map();
+  for (const r of data) {
+    const key = r.outlet + '|' + r.sku;
+    if (!latest.has(key)) latest.set(key, { ...r, category: r.category || 'Other' });
+  }
+  state.rows = [...latest.values()].sort((a, b) => a.sku.localeCompare(b.sku));
+  state.outlets = [...new Set(state.rows.map(r => r.outlet))].sort();
+  if (!state.tab || (state.tab !== ORDER_TAB && !state.outlets.includes(state.tab))) state.tab = state.outlets[0] || ORDER_TAB;
+
+  // Drop drafts for rows that no longer exist
+  for (const id of Object.keys(state.drafts)) if (!state.rows.some(r => String(r.id) === id)) delete state.drafts[id];
+
+  $('loading').hidden = true;
+  $('app').hidden = false;
+  setSync('', 'Synced');
+  render();
+}
+
+$('refresh').addEventListener('click', () => {
+  if (hasUnsaved() && !confirm('Refreshing keeps your unsaved edits, but values from the database may have changed. Continue?')) return;
+  loadData();
+});
+
+/* ---------- Derived values ---------- */
+function current(r) {
+  const d = state.drafts[r.id];
+  return d ? d : { qty: r.qty_on_hand, reorder: r.reorder_level };
+}
+function hasUnsaved() { return Object.keys(state.drafts).length > 0; }
+
+function orderLines() {
+  const bySku = new Map();
+  for (const r of state.rows) {
+    const need = shortfall(r.qty_on_hand, r.reorder_level);
+    if (!bySku.has(r.sku)) bySku.set(r.sku, { sku: r.sku, name: r.item_name, unit: r.unit, category: r.category, per: {}, total: 0 });
+    const line = bySku.get(r.sku);
+    line.per[r.outlet] = need;
+    line.total += need;
+  }
+  return [...bySku.values()].filter(l => l.total > 0).sort((a, b) => b.total - a.total || a.sku.localeCompare(b.sku));
+}
+
+/* ---------- Rendering ---------- */
+function render() {
+  renderKpis();
+  renderTabs();
+  if (state.tab === ORDER_TAB) renderOrders(); else renderOutlet(state.tab);
+  const dates = [...new Set(state.rows.map(r => r.counted_at))].sort();
+  $('countedAt').textContent = dates.length ? 'Latest count: ' + dates.map(fmtDate).join(', ') : 'No stock counts yet';
+}
+
+function renderKpis() {
+  const low = state.rows.filter(r => isLow(r.qty_on_hand, r.reorder_level)).length;
+  const toOrder = state.rows.reduce((s, r) => s + shortfall(r.qty_on_hand, r.reorder_level), 0);
+  const skus = new Set(state.rows.map(r => r.sku)).size;
+  const out = state.rows.filter(r => r.qty_on_hand === 0).length;
+  $('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Outlets</div><div class="kpi-value">${state.outlets.length}</div><div class="kpi-sub">${skus} items each</div></div>
+    <div class="kpi"><div class="kpi-label">Low stock</div><div class="kpi-value accent">${low}</div><div class="kpi-sub">at or below reorder level</div></div>
+    <div class="kpi"><div class="kpi-label">Out of stock</div><div class="kpi-value">${out}</div><div class="kpi-sub">items at zero</div></div>
+    <div class="kpi"><div class="kpi-label">Units to order</div><div class="kpi-value">${toOrder}</div><div class="kpi-sub">across ${orderLines().length} items</div></div>`;
+}
+
+function renderTabs() {
+  const tabs = state.outlets.map(o => {
+    const low = state.rows.filter(r => r.outlet === o && isLow(r.qty_on_hand, r.reorder_level)).length;
+    return `<button class="tab" role="tab" data-tab="${esc(o)}" aria-selected="${state.tab === o}">${esc(o)}<span class="count ${low ? 'low' : ''}">${low} low</span></button>`;
+  });
+  const lines = orderLines().length;
+  tabs.push(`<button class="tab" role="tab" data-tab="${ORDER_TAB}" aria-selected="${state.tab === ORDER_TAB}">Order from suppliers<span class="count ${lines ? 'low' : ''}">${lines}</span></button>`);
+  $('tabs').innerHTML = tabs.join('');
+}
+
+$('tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('.tab');
+  if (!b) return;
+  state.tab = b.dataset.tab;
+  render();
+});
+
+function renderOutlet(outlet) {
+  const rows = state.rows.filter(r => r.outlet === outlet);
+  const cats = CATEGORY_ORDER.filter(c => rows.some(r => r.category === c))
+    .concat([...new Set(rows.map(r => r.category))].filter(c => !CATEGORY_ORDER.includes(c)).sort());
+  if (state.category !== 'All' && !cats.includes(state.category)) state.category = 'All';
+
+  const chips = ['All', ...cats].map(c => {
+    const n = c === 'All' ? rows.length : rows.filter(r => r.category === c).length;
+    return `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.category === c}">${esc(c)} · ${n}</button>`;
+  }).join('');
+
+  let visible = rows.filter(r => state.category === 'All' || r.category === state.category);
+  if (state.lowOnly) visible = visible.filter(r => { const c = current(r); return isLow(c.qty, c.reorder) || state.drafts[r.id]; });
+
+  const groups = cats.filter(c => visible.some(r => r.category === c)).map(c => `
+    <div class="cat-title">${esc(c)}</div>
+    <div class="grid">${visible.filter(r => r.category === c).map(cardHtml).join('')}</div>`).join('');
+
+  $('view').innerHTML = `
+    <div class="filters">
+      ${chips}
+      <label class="toggle"><input type="checkbox" id="lowOnly" ${state.lowOnly ? 'checked' : ''}> Low items only</label>
+    </div>
+    ${groups || '<div class="panel"><div class="empty"><strong>Nothing low here</strong>Every item in this view is above its reorder level.</div></div>'}`;
+}
+
+function cardHtml(r) {
+  const c = current(r);
+  const low = isLow(c.qty, c.reorder);
+  const dirty = !!state.drafts[r.id];
+  const saving = !!state.saving[r.id];
+  const need = shortfall(c.qty, c.reorder);
+  const ro = '';
+  let note;
+  if (c.qty === 0) note = `<span class="note"><strong>Out of stock</strong> · order ${need}</span>`;
+  else if (need > 0) note = `<span class="note"><strong>${need} short</strong> of reorder level</span>`;
+  else if (low) note = `<span class="note"><strong>At reorder level</strong></span>`;
+  else note = `<span class="note">${c.qty - c.reorder} above reorder level</span>`;
+
+  return `
+  <article class="card ${low ? 'is-low' : ''} ${dirty ? 'dirty' : ''}" data-id="${r.id}">
+    <div class="card-top">
+      <div>
+        <div class="item-name">${esc(r.item_name)}</div>
+        <div class="item-meta">${esc(r.sku)} · per ${esc(r.unit)}</div>
+      </div>
+      <span class="badge ${low ? 'low' : ''}">${low ? 'Low' : 'OK'}</span>
+    </div>
+    <div class="fields">
+      <div>
+        <div class="field-label">On hand</div>
+        <div class="stepper">
+          <button data-act="dec" data-field="qty" aria-label="Remove one ${esc(r.item_name)}" ${ro || (c.qty <= 0 ? 'disabled' : '')}>−</button>
+          <input type="number" min="0" inputmode="numeric" data-field="qty" value="${c.qty}" aria-label="${esc(r.item_name)} on hand" ${ro}>
+          <button data-act="inc" data-field="qty" aria-label="Add one ${esc(r.item_name)}" ${ro}>+</button>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Reorder level</div>
+        <div class="stepper">
+          <button data-act="dec" data-field="reorder" aria-label="Lower reorder level" ${ro || (c.reorder <= 0 ? 'disabled' : '')}>−</button>
+          <input type="number" min="0" inputmode="numeric" data-field="reorder" value="${c.reorder}" aria-label="${esc(r.item_name)} reorder level" ${ro}>
+          <button data-act="inc" data-field="reorder" aria-label="Raise reorder level" ${ro}>+</button>
+        </div>
+      </div>
+    </div>
+    <div class="card-foot">
+      ${note}
+      ${dirty ? `<button class="btn btn-ghost" data-act="reset" ${saving ? 'disabled' : ''}>Undo</button>
+                 <button class="btn btn-primary" data-act="save" ${saving ? 'disabled' : ''}>${saving ? 'Saving…' : 'Save'}</button>` : ''}
+    </div>
+  </article>`;
+}
+
+function setDraft(r, field, value) {
+  const c = { ...current(r) };
+  c[field] = Math.max(0, Math.floor(Number(value) || 0));
+  if (c.qty === r.qty_on_hand && c.reorder === r.reorder_level) delete state.drafts[r.id];
+  else state.drafts[r.id] = c;
+}
+
+// Re-render one card in place so typing focus isn't lost elsewhere
+function refreshCard(id) {
+  const r = state.rows.find(x => x.id === id);
+  const el = document.querySelector(`.card[data-id="${id}"]`);
+  if (!r || !el) return;
+  el.outerHTML = cardHtml(r);
+}
+
+$('view').addEventListener('click', async (e) => {
+  const chip = e.target.closest('.chip');
+  if (chip) { state.category = chip.dataset.cat; render(); return; }
+
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = Number(btn.closest('.card').dataset.id);
+  const r = state.rows.find(x => x.id === id);
+  const act = btn.dataset.act;
+
+  if (act === 'inc' || act === 'dec') {
+    const f = btn.dataset.field;
+    setDraft(r, f, current(r)[f] + (act === 'inc' ? 1 : -1));
+    refreshCard(id);
+  } else if (act === 'reset') {
+    delete state.drafts[id];
+    refreshCard(id);
+  } else if (act === 'save') {
+    await save(r);
+  }
+});
+
+$('view').addEventListener('change', (e) => {
+  if (e.target.id === 'lowOnly') { state.lowOnly = e.target.checked; render(); return; }
+  const input = e.target.closest('input[data-field]');
+  if (!input) return;
+  const id = Number(input.closest('.card').dataset.id);
+  setDraft(state.rows.find(x => x.id === id), input.dataset.field, input.value);
+  refreshCard(id);
+});
+
+$('view').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches('input[data-field]')) e.target.blur();
+});
+
+async function save(r) {
+  const d = state.drafts[r.id];
+  if (!d) return;
+  state.saving[r.id] = true;
+  refreshCard(r.id);
+  setSync('busy', 'Saving…');
+
+  const { data, error } = await db
+    .from('stock_counts')
+    .update({ qty_on_hand: d.qty, reorder_level: d.reorder })
+    .eq('id', r.id)
+    .select('id, qty_on_hand, reorder_level');
+
+  delete state.saving[r.id];
+
+  if (error || !data || data.length === 0) {
+    const msg = error ? 'Not saved: ' + error.message : 'Not saved: this item could not be found. Try Refresh.';
+    toast(msg, true);
+    setSync('err', 'Save failed');
+    refreshCard(r.id);
+    return;
+  }
+
+  r.qty_on_hand = data[0].qty_on_hand;
+  r.reorder_level = data[0].reorder_level;
+  delete state.drafts[r.id];
+  setSync('', 'Synced');
+  toast(`${r.item_name} saved for ${r.outlet}`);
+  render();
+}
+
+function orderText(lines) {
+  const date = new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+  const out = [`Supplier order – ${date}`, ''];
+  for (const l of lines) {
+    const split = state.outlets.filter(o => l.per[o] > 0).map(o => `${o} ${l.per[o]}`).join(', ');
+    out.push(`${l.name} (${l.sku}): ${l.total} ${l.unit}${l.total === 1 ? '' : 's'}  [${split}]`);
+  }
+  out.push('', `Total: ${lines.reduce((s, l) => s + l.total, 0)} units across ${lines.length} items`);
+  return out.join('\n');
+}
+
+function renderOrders() {
+  const lines = orderLines();
+  if (!lines.length) {
+    $('view').innerHTML = `<div class="panel"><div class="empty"><strong>Nothing to order</strong>Every outlet is at or above its reorder levels.</div></div>`;
+    return;
+  }
+  const head = state.outlets.map(o => `<th class="num">${esc(o)}</th>`).join('');
+  const body = lines.map(l => `
+    <tr>
+      <td><div>${esc(l.name)}</div><div class="sub">${esc(l.sku)} · ${esc(l.category)}</div></td>
+      ${state.outlets.map(o => `<td class="num">${l.per[o] > 0 ? l.per[o] : '<span class="dash">—</span>'}</td>`).join('')}
+      <td class="num total">${l.total}</td>
+      <td class="sub">${esc(l.unit)}${l.total === 1 ? '' : 's'}</td>
+    </tr>`).join('');
+  const unsavedNote = hasUnsaved() ? ' Unsaved edits are not included until you save them.' : '';
+
+  $('view').innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Order from suppliers</h2>
+          <p>Units needed to bring each outlet back up to its reorder level.${unsavedNote}</p>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="copyOrder">Copy order list</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Item</th>${head}<th class="num">Total</th><th>Unit</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+      <div class="order-text-label">Text that will be copied</div>
+      <pre class="order-text" id="orderText">${esc(orderText(lines))}</pre>
+    </div>`;
+
+  $('copyOrder').addEventListener('click', async () => {
+    const text = orderText(lines);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    toast('Order list copied');
+  });
+}
+
+window.addEventListener('beforeunload', (e) => { if (hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
+loadData();
+</script>
+</body>
+</html>
