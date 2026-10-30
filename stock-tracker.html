@@ -165,6 +165,44 @@
   .order-text-label { padding: 16px 24px 0; font-size: 14px; color: var(--muted); font-weight: 500; border-top: 1px solid var(--line); background: var(--soft); }
   .order-text-label + .order-text { border-top: none; padding-top: 8px; }
 
+  /* Top bar user area */
+  .who { font-size: 15px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .who strong { color: var(--text); font-weight: 600; }
+  .role { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--muted); }
+  .role.admin { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* Forms */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 11px 14px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--card); font-size: 17px;
+  }
+  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .hint { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .error { color: var(--danger); font-size: 15px; margin: -4px 0 16px; }
+  .error:empty { display: none; }
+
+  /* Sign in */
+  .signin { max-width: 420px; margin: 72px auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow); }
+  .signin h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -.02em; }
+  .signin > p { margin: 0 0 24px; color: var(--muted); font-size: 16px; }
+  .signin .btn { width: 100%; padding: 12px; font-size: 17px; }
+
+  /* Dialog */
+  dialog { border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; width: min(420px, calc(100% - 32px)); background: var(--card); color: var(--text); box-shadow: 0 20px 50px rgba(16,24,40,.18); }
+  dialog::backdrop { background: rgba(16,24,40,.45); }
+  dialog h2 { margin: 0 0 4px; font-size: 21px; }
+  dialog > form > p { margin: 0 0 20px; color: var(--muted); font-size: 15px; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+  /* Users */
+  .users-layout { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+  .panel-body { padding: 20px 24px; }
+  .panel-body .btn-primary { width: 100%; padding: 12px; }
+  .you { font-size: 13px; color: var(--muted); margin-left: 6px; }
+  @media (max-width: 860px) { .users-layout { grid-template-columns: 1fr; } }
+
 
   /* Toast */
   .toast {
@@ -183,7 +221,8 @@
     body { font-size: 16px; }
     .wrap { padding: 0 16px 48px; }
     .topbar .wrap { height: 60px; }
-    .sync span { display: none; }
+    .sync span, .who .name-full { display: none; }
+    .topbar .btn { padding: 8px 10px; font-size: 14px; }
     .head h1 { font-size: 25px; }
     .kpi { padding: 14px 16px; }
     .kpi-value { font-size: 26px; }
@@ -201,10 +240,29 @@
     <div class="brand"><span class="brand-dot"></span>Stockroom</div>
     <div class="spacer"></div>
     <div class="sync" id="sync" hidden><span class="pip"></span><span id="syncText">Synced</span></div>
+    <div class="who" id="who" hidden></div>
+    <button class="btn btn-ghost" id="changePw" hidden>Change password</button>
+    <button class="btn" id="signOut" hidden>Sign out</button>
   </div>
 </header>
 
 <main class="wrap">
+  <!-- Sign in -->
+  <form class="signin" id="signin" hidden>
+    <h1>Sign in</h1>
+    <p>Sign in with your username to view and update stock.</p>
+    <div class="field">
+      <label for="loginUser">Username</label>
+      <input id="loginUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div class="field">
+      <label for="loginPw">Password</label>
+      <input id="loginPw" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="error" id="signinError"></div>
+    <button class="btn btn-primary" type="submit" id="signinBtn">Sign in</button>
+  </form>
+
   <div class="loading" id="loading">Loading…</div>
 
   <!-- App -->
@@ -225,15 +283,38 @@
   </section>
 </main>
 
+<!-- Password dialog (change own password / reset another user's) -->
+<dialog id="pwDialog">
+  <form method="dialog" id="pwForm">
+    <h2 id="pwTitle">Change password</h2>
+    <p id="pwSub"></p>
+    <div class="field">
+      <label for="pwNew">New password</label>
+      <input id="pwNew" type="password" autocomplete="new-password" minlength="6" required>
+      <div class="hint">At least 6 characters.</div>
+    </div>
+    <div class="field">
+      <label for="pwConfirm">Confirm new password</label>
+      <input id="pwConfirm" type="password" autocomplete="new-password" minlength="6" required>
+    </div>
+    <div class="error" id="pwError"></div>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" type="button" id="pwCancel">Cancel</button>
+      <button class="btn btn-primary" type="submit" id="pwSave">Save password</button>
+    </div>
+  </form>
+</dialog>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const SUPABASE_URL = 'https://mktqkopvppmwjgfnjlqn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_YJkt9WKGpn3vZu3VWvELKA_05R3WJ2N';
-// No sign-in: the stock table is readable and editable with the publishable key
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+// Users sign in with Supabase Auth; the stock table is only readable/editable when signed in
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const ORDER_TAB = '__order';
+const USERS_TAB = '__users';
 const CATEGORY_ORDER = ['Coffee', 'Dairy', 'Powders & syrups', 'Bakery', 'Packaging', 'Other'];
 
 const state = {
@@ -244,6 +325,8 @@ const state = {
   lowOnly: false,
   drafts: {},        // id -> { qty, reorder }
   saving: {},        // id -> true
+  user: null,        // { id, username, display_name, role }
+  users: [],         // profiles, loaded for admins
 };
 
 const $ = (id) => document.getElementById(id);
@@ -269,6 +352,209 @@ function setSync(mode, text) {
   $('syncText').textContent = text;
 }
 
+/* ---------- Auth ---------- */
+// Users are stored in Supabase Auth as <username>@example.com (same rule as the manage-users function)
+const toSlug = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+function toLoginEmail(input) {
+  const v = input.trim();
+  return v.includes('@') ? v : toSlug(v) + '@example.com';
+}
+
+async function boot() {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) await startApp(session);
+  else showSignIn();
+}
+
+function showSignIn() {
+  state.user = null;
+  state.drafts = {};
+  state.users = [];
+  $('loading').hidden = true;
+  $('app').hidden = true;
+  $('signin').hidden = false;
+  for (const id of ['sync', 'who', 'changePw', 'signOut']) $(id).hidden = true;
+  $('loginUser').focus();
+}
+
+$('signin').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('signinError').textContent = '';
+  $('signinBtn').disabled = true;
+  $('signinBtn').textContent = 'Signing in…';
+  const { data, error } = await db.auth.signInWithPassword({
+    email: toLoginEmail($('loginUser').value),
+    password: $('loginPw').value,
+  });
+  $('signinBtn').disabled = false;
+  $('signinBtn').textContent = 'Sign in';
+  if (error) {
+    $('signinError').textContent = /invalid login/i.test(error.message) ? 'Wrong username or password.' : error.message;
+    return;
+  }
+  $('loginPw').value = '';
+  await startApp(data.session);
+});
+
+$('signOut').addEventListener('click', async () => {
+  if (hasUnsaved() && !confirm('You have unsaved changes. Sign out anyway?')) return;
+  state.drafts = {};
+  await db.auth.signOut();
+  showSignIn();
+  toast('Signed out');
+});
+
+async function startApp(session) {
+  $('signin').hidden = true;
+  $('loading').hidden = false;
+  $('loading').textContent = 'Loading…';
+
+  const { data: profile } = await db.from('profiles')
+    .select('id, username, display_name, role').eq('id', session.user.id).maybeSingle();
+  state.user = profile || { id: session.user.id, username: session.user.email.split('@')[0], display_name: session.user.email, role: 'member' };
+
+  const u = state.user;
+  $('who').innerHTML = `<span class="name-full">Signed in as</span> <strong>${esc(u.display_name || u.username)}</strong>`
+    + `<span class="role ${u.role === 'admin' ? 'admin' : ''}">${esc(u.role)}</span>`;
+  for (const id of ['who', 'changePw', 'signOut']) $(id).hidden = false;
+
+  await loadData();
+}
+
+db.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT' && state.user) showSignIn();
+});
+
+/* ---------- Password dialog ---------- */
+function askPassword(title, sub) {
+  const dlg = $('pwDialog');
+  $('pwTitle').textContent = title;
+  $('pwSub').textContent = sub;
+  $('pwNew').value = ''; $('pwConfirm').value = ''; $('pwError').textContent = '';
+  dlg.showModal();
+  return new Promise((resolve) => {
+    const done = (val) => {
+      $('pwForm').removeEventListener('submit', onSubmit);
+      $('pwCancel').removeEventListener('click', onCancel);
+      dlg.removeEventListener('cancel', onCancel);
+      dlg.close();
+      resolve(val);
+    };
+    const onSubmit = (e) => {
+      e.preventDefault();
+      if ($('pwNew').value !== $('pwConfirm').value) { $('pwError').textContent = "Passwords don't match."; return; }
+      done($('pwNew').value);
+    };
+    const onCancel = (e) => { e.preventDefault(); done(null); };
+    $('pwForm').addEventListener('submit', onSubmit);
+    $('pwCancel').addEventListener('click', onCancel);
+    dlg.addEventListener('cancel', onCancel);
+  });
+}
+
+$('changePw').addEventListener('click', async () => {
+  const pw = await askPassword('Change your password', 'You will stay signed in on this device.');
+  if (!pw) return;
+  const { error } = await db.auth.updateUser({ password: pw });
+  if (error) toast('Password not changed: ' + error.message, true);
+  else toast('Your password has been changed');
+});
+
+/* ---------- User management (admins) ---------- */
+async function callManageUsers(body) {
+  const { data, error } = await db.functions.invoke('manage-users', { body });
+  if (error) {
+    // Pull the function's own error message out of the response when there is one
+    let msg = error.message;
+    try { const j = await error.context.json(); if (j?.error) msg = j.error; } catch {}
+    return { error: msg };
+  }
+  return { data };
+}
+
+async function loadUsers() {
+  const { data, error } = await db.from('profiles')
+    .select('id, username, display_name, role, created_at').order('created_at');
+  if (error) { toast('Could not load users: ' + error.message, true); return; }
+  state.users = data;
+}
+
+function renderUsers() {
+  const rows = state.users.map(u => `
+    <tr>
+      <td><div>${esc(u.display_name || u.username)}${u.id === state.user.id ? '<span class="you">(you)</span>' : ''}</div></td>
+      <td>${esc(u.username)}</td>
+      <td><span class="role ${u.role === 'admin' ? 'admin' : ''}">${esc(u.role)}</span></td>
+      <td class="sub">${new Date(u.created_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+      <td class="num"><button class="btn" data-reset="${esc(u.id)}" data-name="${esc(u.display_name || u.username)}">Reset password</button></td>
+    </tr>`).join('');
+
+  $('view').innerHTML = `
+    <div class="users-layout">
+      <form class="panel" id="addUser" autocomplete="off">
+        <div class="panel-head"><div><h2>Add user</h2><p>They sign in with the username shown below.</p></div></div>
+        <div class="panel-body">
+          <div class="field">
+            <label for="nuName">Name</label>
+            <input id="nuName" type="text" maxlength="40" required>
+            <div class="hint" id="nuUsername">Username: –</div>
+          </div>
+          <div class="field">
+            <label for="nuPw">Initial password</label>
+            <input id="nuPw" type="text" minlength="6" required autocomplete="off">
+            <div class="hint">At least 6 characters. Ask them to change it after signing in.</div>
+          </div>
+          <div class="field">
+            <label for="nuRole">Role</label>
+            <select id="nuRole">
+              <option value="member">Member: view and update stock</option>
+              <option value="admin">Admin: also manage users</option>
+            </select>
+          </div>
+          <div class="error" id="nuError"></div>
+          <button class="btn btn-primary" type="submit" id="nuSubmit">Add user</button>
+        </div>
+      </form>
+
+      <div class="panel">
+        <div class="panel-head"><div><h2>Users</h2><p>${state.users.length} people can sign in.</p></div></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Added</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  $('nuName').addEventListener('input', () => {
+    const slug = toSlug($('nuName').value);
+    $('nuUsername').textContent = 'Username: ' + (slug || '–');
+  });
+
+  $('addUser').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('nuError').textContent = '';
+    $('nuSubmit').disabled = true; $('nuSubmit').textContent = 'Adding…';
+    const res = await callManageUsers({
+      action: 'create', name: $('nuName').value, password: $('nuPw').value, role: $('nuRole').value,
+    });
+    $('nuSubmit').disabled = false; $('nuSubmit').textContent = 'Add user';
+    if (res.error) { $('nuError').textContent = res.error; return; }
+    toast(`Added ${res.data.username}. They can sign in now.`);
+    await loadUsers();
+    renderUsers();
+  });
+}
+
+async function resetPassword(id, name) {
+  const pw = await askPassword('Reset password', `Set a new password for ${name}.`);
+  if (!pw) return;
+  const res = await callManageUsers({ action: 'reset_password', id, password: pw });
+  if (res.error) toast('Password not reset: ' + res.error, true);
+  else toast(`Password reset for ${name}`);
+}
+
 /* ---------- Data ---------- */
 async function loadData() {
   setSync('busy', 'Loading…');
@@ -291,10 +577,14 @@ async function loadData() {
   }
   state.rows = [...latest.values()].sort((a, b) => a.sku.localeCompare(b.sku));
   state.outlets = [...new Set(state.rows.map(r => r.outlet))].sort();
-  if (!state.tab || (state.tab !== ORDER_TAB && !state.outlets.includes(state.tab))) state.tab = state.outlets[0] || ORDER_TAB;
+  const isAdmin = state.user?.role === 'admin';
+  const validTab = state.tab === ORDER_TAB || (state.tab === USERS_TAB && isAdmin) || state.outlets.includes(state.tab);
+  if (!validTab) state.tab = state.outlets[0] || ORDER_TAB;
 
   // Drop drafts for rows that no longer exist
   for (const id of Object.keys(state.drafts)) if (!state.rows.some(r => String(r.id) === id)) delete state.drafts[id];
+
+  if (isAdmin) await loadUsers();
 
   $('loading').hidden = true;
   $('app').hidden = false;
@@ -330,7 +620,9 @@ function orderLines() {
 function render() {
   renderKpis();
   renderTabs();
-  if (state.tab === ORDER_TAB) renderOrders(); else renderOutlet(state.tab);
+  if (state.tab === ORDER_TAB) renderOrders();
+  else if (state.tab === USERS_TAB) renderUsers();
+  else renderOutlet(state.tab);
   const dates = [...new Set(state.rows.map(r => r.counted_at))].sort();
   $('countedAt').textContent = dates.length ? 'Latest count: ' + dates.map(fmtDate).join(', ') : 'No stock counts yet';
 }
@@ -354,6 +646,9 @@ function renderTabs() {
   });
   const lines = orderLines().length;
   tabs.push(`<button class="tab" role="tab" data-tab="${ORDER_TAB}" aria-selected="${state.tab === ORDER_TAB}">Order from suppliers<span class="count ${lines ? 'low' : ''}">${lines}</span></button>`);
+  if (state.user?.role === 'admin') {
+    tabs.push(`<button class="tab" role="tab" data-tab="${USERS_TAB}" aria-selected="${state.tab === USERS_TAB}">Users<span class="count">${state.users.length}</span></button>`);
+  }
   $('tabs').innerHTML = tabs.join('');
 }
 
@@ -454,6 +749,9 @@ function refreshCard(id) {
 }
 
 $('view').addEventListener('click', async (e) => {
+  const reset = e.target.closest('button[data-reset]');
+  if (reset) { await resetPassword(reset.dataset.reset, reset.dataset.name); return; }
+
   const chip = e.target.closest('.chip');
   if (chip) { state.category = chip.dataset.cat; render(); return; }
 
@@ -504,7 +802,7 @@ async function save(r) {
   delete state.saving[r.id];
 
   if (error || !data || data.length === 0) {
-    const msg = error ? 'Not saved: ' + error.message : 'Not saved: this item could not be found. Try Refresh.';
+    const msg = error ? 'Not saved: ' + error.message : 'Not saved: your session may have expired. Sign out and sign in again.';
     toast(msg, true);
     setSync('err', 'Save failed');
     refreshCard(r.id);
@@ -580,7 +878,7 @@ function renderOrders() {
 }
 
 window.addEventListener('beforeunload', (e) => { if (hasUnsaved()) { e.preventDefault(); e.returnValue = ''; } });
-loadData();
+boot();
 </script>
 </body>
 </html>

@@ -11,7 +11,15 @@ A single-page stock tracker for three café outlets (Jurong, Orchard, Tampines),
 
 ## Running it
 
-Open `stock-tracker.html` in any browser. No build step or sign-in is needed.
+Open `stock-tracker.html` in any browser (or the deployed site) and sign in with your username and password.
+
+## Users and sign-in
+
+- Accounts live in Supabase Auth (`auth.users`). Each user signs in as `<username>`, which the app maps to `<username>@example.com`.
+- `public.profiles` holds each user's username, display name and role (`admin` or `member`). A trigger fills it in when a user is created.
+- **Members** can view stock and change quantities and reorder levels.
+- **Admins** also get a **Users** tab to add users (with an initial password and role) and reset passwords, via the `manage-users` Edge Function.
+- Anyone signed in can change their own password from the top bar.
 
 ## Data
 
@@ -28,6 +36,5 @@ The page reads and writes the `public.stock_counts` table in Supabase.
 
 ## Security note
 
-The page uses the project's publishable key, and the table lets anyone with that key change
-`qty_on_hand` and `reorder_level`. No other columns can be changed, and rows can't be added or deleted.
-Because this repo is public, anyone can find the key here.
+The publishable key in the page is safe to share: without signing in it can't read or change stock.
+Signed-in users can only change `qty_on_hand` and `reorder_level`; rows can't be added, deleted or renamed from the app.
